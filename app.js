@@ -23,7 +23,7 @@ function shell(title,body,sub=''){return `<section class="page"><div class="pape
 
 async function renderIndex(){
   app.innerHTML=shell('My PLAN-DO-SEE DIARY',`
-  <div class="notice"> 직접 계획하고 실행하고 보완할 점을 찾아보세요.</div>
+  <div class="notice"> 현재 로그인 없이 이용할 수 있으며, 링크를 아는 사람은 내용을 볼 수 있습니다. 공개해도 괜찮은 내용만 작성하세요..</div>
   <p class="subtitle">A small study notebook for turning plans into action and reflection.</p>
   <div class="index-list">
     <div class="index-item" onclick="go('plan')"><strong>01 PLAN</strong><br>계획 세우기 · 기간 · 성공 기준 · 예상 시간</div>
