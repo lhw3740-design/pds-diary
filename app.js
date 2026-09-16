@@ -128,5 +128,58 @@ async function saveReflection(planId){const text=document.getElementById('learn'
 async function showRecords(kind){const [tasks,logs]=await Promise.all([getTasks(),getLogs()]);const selected=sessionStorage.getItem('selectedPlan');let ts=tasks.filter(t=>t.plan_id===selected);const blockedIds=new Set(logs.filter(l=>l.blocker.trim()).map(l=>l.task_id));if(kind==='completed')ts=ts.filter(t=>t.status==='completed');if(kind==='delayed')ts=ts.filter(t=>t.status!=='completed'&&t.due_date<todaySeoul());if(kind==='blocked')ts=ts.filter(t=>blockedIds.has(t.id));openModal(`<h2>Evidence records</h2>${ts.map(t=>`<p><b>${esc(t.title)}</b><br>Due ${t.due_date} · ${t.status} · ${esc(t.tag)}</p>`).join('')||'<p>No records.</p>'}`)}
 async function renderHistory(){const plans=await getPlans();let html='';for(const p of plans){const {data:r}=await sb.from('plan_revisions').select('*').eq('plan_id',p.id).order('revision_number',{ascending:true});html+=`<article class="plan-card"><h3>${esc(p.title)}</h3><p>Current: ${p.start_date} — ${p.end_date} · ${p.priority} · ${fmtMin(p.estimated_minutes)}</p>${(r||[]).map(x=>`<div class="timeline"><b>Revision ${x.revision_number}</b><br>${x.start_date} — ${x.end_date}<br>${x.priority} · ${fmtMin(x.estimated_minutes)}<br>${esc(x.success_criteria)}</div>`).join('')||'<p class="meta">No revisions yet.</p>'}</article>`}
 app.innerHTML=shell('HISTORY',`<div class="grid">${html}</div><button class="action" onclick="exportAll()">EXPORT ALL DATA</button>`)}
-async function exportAll(){const [plans,tasks,logs]=await Promise.all([getPlans(),getTasks(),getLogs()]);const {data:rev}=await sb.from('plan_revisions').select('*');const {data:ref}=await sb.from('reflections').select('*');const blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),plans,tasks,execution_logs:logs,plan_revisions:rev||[],reflections:ref||[]},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pds-diary-export.json';a.click();URL.revokeObjectURL(a.href)}
+async function exportAll() {
+  try {
+    const [plans, tasks, logs] = await Promise.all([
+      getPlans(),
+      getTasks(),
+      getLogs()
+    ]);
+
+    const { data: revisions, error: revisionError } =
+      await sb.from('plan_revisions').select('*');
+
+    if (revisionError) throw revisionError;
+
+    const { data: reflections, error: reflectionError } =
+      await sb.from('reflections').select('*');
+
+    if (reflectionError) throw reflectionError;
+
+    const exportData = {
+      schema: 'pds-schema-v2',
+      exported_at: new Date().toISOString(),
+
+      plans: plans || [],
+      plan_revisions: revisions || [],
+      tasks: tasks || [],
+      execution_logs: logs || [],
+      reflections: reflections || []
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+
+    const blob = new Blob([json], {
+      type: 'application/json;charset=utf-8'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `pds-diary-export-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+
+    alert('전체 데이터가 JSON 파일로 저장되었습니다.');
+  } catch (error) {
+    alert(`Export failed: ${error.message}`);
+  }
+}
 async function render(){try{const p=location.hash.slice(1)||'index';if(p==='plan')await renderPlan();else if(p==='do')await renderDo();else if(p==='see')await renderSee();else if(p==='history')await renderHistory();else await renderIndex()}catch(e){app.innerHTML=shell('Connection error',`<div class="notice">Supabase에 연결하지 못했습니다.</div><pre>${esc(e.message||e)}</pre><p>config.js의 URL/key와 Supabase SQL 실행 여부를 확인하세요.</p>`)}}render();
