@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My PLAN-DO-SEE DIARY</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="brand" data-page="index">My PLAN-DO-SEE DIARY</button>
+  <nav>
+    <button data-page="plan">01 PLAN</button>
+    <button data-page="do">02 DO</button>
+    <button data-page="see">03 SEE</button>
+    <button data-page="history">04 HISTORY</button>
+  </nav>
+</header>
+
+<main id="app"></main>
+
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card">
+    <button id="closeModal" class="close">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
