@@ -135,7 +135,29 @@ async function renderIndex(){
     <div class="index-item" onclick="go('do')"><strong>02 DO</strong><br>실제로 한 일 · 할 일 · 실행 타임라인</div>
     <div class="index-item" onclick="go('see')"><strong>03 SEE</strong><br>숫자보다 기록을 보고 다음 계획을 생각하기</div>
     <div class="index-item" onclick="go('history')"><strong>04 HISTORY</strong><br>처음 계획과 수정 이력 보기</div>
+  </div>
+
+  <div class="paper" style="margin-top:24px;padding:16px">
+    <h3>계정 관리</h3>
+    <p class="meta">계정을 삭제하면 이 계정에 속한 모든 계획·할 일·실행 기록·리플렉션이 즉시 삭제됩니다. 로그인 정보(이메일) 자체는 보안 정책상 클라이언트에서 즉시 지울 수 없어, 로그아웃 처리 후 Supabase 인증 시스템에서 별도로 최종 삭제됩니다.</p>
+    <button class="action danger" onclick="deleteAccount()">계정 및 모든 자료 삭제</button>
   </div>`);
+}
+async function deleteAccount(){
+  if(!confirm('정말 삭제할까요? 이 계정의 모든 다이어리 자료가 영구히 사라집니다.'))return;
+  if(!confirm('한 번 더 확인합니다. 되돌릴 수 없습니다. 삭제할까요?'))return;
+  const u=uid();
+  const [r1,r2,r3,r4,r5]=await Promise.all([
+    sb.from('execution_logs').delete().eq('user_id',u),
+    sb.from('reflections').delete().eq('user_id',u),
+    sb.from('plan_revisions').delete().eq('user_id',u),
+    sb.from('tasks').delete().eq('user_id',u),
+    sb.from('plans').delete().eq('user_id',u),
+  ]);
+  const err=[r1,r2,r3,r4,r5].find(r=>r.error);
+  if(err){alert('삭제 중 오류: '+err.error.message);return}
+  alert('내 다이어리 자료가 모두 삭제되었습니다. 로그아웃합니다. (로그인 계정 자체를 완전히 지우려면 Supabase 대시보드에서 처리해야 합니다.)');
+  await sb.auth.signOut();
 }
 
 async function renderPlan(){
@@ -182,22 +204,21 @@ async function renderDo(){
  const selected=sessionStorage.getItem('selectedPlan')||plans[0]?.id;
  const plan=plans.find(p=>p.id===selected)||plans[0];
  if(!plan){app.innerHTML=shell('DO','<div class="empty">Create a plan first.</div>');return}
- let list=tasks.filter(t=>t.plan_id===plan.id);
+ let list=tasks.filter(t=>t.plan_id===plan.id&&t.status!=='completed');
  app.innerHTML=shell('DO',`
  <div class="controls">
  <select id="planSel">${plans.map(p=>`<option value="${p.id}" ${p.id===plan.id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
  <input id="q" placeholder="Search tasks...">
- <select id="status"><option value="">All status</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select>
  <select id="priority"><option value="">All priority</option><option>HIGH</option><option>MID</option><option>LOW</option></select>
  <select id="tag"><option value="">All tags</option>${[...new Set(list.map(t=>t.tag))].map(t=>`<option>${esc(t)}</option>`).join('')}</select>
  <select id="sort"><option value="due">Due date ↑</option><option value="priority">Priority ↑</option><option value="title">Title A-Z</option></select>
  <button class="action" onclick="newTask('${plan.id}')">+ TASK</button>
  </div>
- <p class="meta">Sort rule: selected field ascending; ties are resolved by task ID ascending.</p>
+ <p class="meta">Sort rule: selected field ascending; ties are resolved by task ID ascending. Completed tasks move to SEE → COMPLETED.</p>
  <div id="taskList"></div>`);
- const refresh=()=>{let x=list.filter(t=>(!q.value||t.title.toLowerCase().includes(q.value.toLowerCase()))&&(!status.value||t.status===status.value)&&(!priority.value||t.priority===priority.value)&&(!tag.value||t.tag===tag.value));
- const pr={HIGH:1,MID:2,LOW:3};x.sort((a,b)=>{let z=sort.value==='priority'?pr[a.priority]-pr[b.priority]:sort.value==='title'?a.title.localeCompare(b.title):a.due_date.localeCompare(b.due_date);return z||a.id.localeCompare(b.id)});document.getElementById('taskList').innerHTML=x.map(t=>taskCard(t,logs.filter(l=>l.task_id===t.id))).join('')||'<div class="empty">No matching tasks.</div>'};
- ['q','status','priority','tag','sort'].forEach(id=>document.getElementById(id).oninput=refresh);
+ const refresh=()=>{let x=list.filter(t=>(!q.value||t.title.toLowerCase().includes(q.value.toLowerCase()))&&(!priority.value||t.priority===priority.value)&&(!tag.value||t.tag===tag.value));
+ const pr={HIGH:1,MID:2,LOW:3};x.sort((a,b)=>{let z=sort.value==='priority'?pr[a.priority]-pr[b.priority]:sort.value==='title'?a.title.localeCompare(b.title):a.due_date.localeCompare(b.due_date);return z||a.id.localeCompare(b.id)});document.getElementById('taskList').innerHTML=x.map(t=>taskCard(t,logs.filter(l=>l.task_id===t.id))).join('')||'<div class="empty">No matching tasks. (Completed tasks now live in SEE → COMPLETED.)</div>'};
+ ['q','priority','tag','sort'].forEach(id=>document.getElementById(id).oninput=refresh);
  document.getElementById('planSel').onchange=e=>{sessionStorage.setItem('selectedPlan',e.target.value);renderDo()};
  refresh();
 }
@@ -225,7 +246,8 @@ async function renderSee(){
  document.getElementById('seePlan').onchange=e=>{sessionStorage.setItem('selectedPlan',e.target.value);renderSee()};
 }
 async function saveReflection(planId){const text=document.getElementById('learn').value,next=document.getElementById('next').value;const {error}=await sb.from('reflections').insert({user_id:uid(),plan_id:planId,reflection_text:text,next_action:next});if(error)return alert(error.message);alert('Reflection saved. You can copy the next action into a new plan.')}
-async function showRecords(kind){const [tasks,logs]=await Promise.all([getTasks(),getLogs()]);const selected=sessionStorage.getItem('selectedPlan');let ts=tasks.filter(t=>t.plan_id===selected);const blockedIds=new Set(logs.filter(l=>l.blocker.trim()).map(l=>l.task_id));if(kind==='completed')ts=ts.filter(t=>t.status==='completed');if(kind==='delayed')ts=ts.filter(t=>t.status!=='completed'&&t.due_date<todaySeoul());if(kind==='blocked')ts=ts.filter(t=>blockedIds.has(t.id));openModal(`<h2>Evidence records</h2>${ts.map(t=>`<p><b>${esc(t.title)}</b><br>Due ${t.due_date} · ${t.status} · ${esc(t.tag)}</p>`).join('')||'<p>No records.</p>'}`)}
+async function showRecords(kind){const [tasks,logs]=await Promise.all([getTasks(),getLogs()]);const selected=sessionStorage.getItem('selectedPlan');let ts=tasks.filter(t=>t.plan_id===selected);const blockedIds=new Set(logs.filter(l=>l.blocker.trim()).map(l=>l.task_id));if(kind==='completed')ts=ts.filter(t=>t.status==='completed');if(kind==='delayed')ts=ts.filter(t=>t.status!=='completed'&&t.due_date<todaySeoul());if(kind==='blocked')ts=ts.filter(t=>blockedIds.has(t.id));openModal(`<h2>Evidence records</h2>${ts.map(t=>`<p><b>${esc(t.title)}</b><br>Due ${t.due_date} · ${t.status} · ${esc(t.tag)}${kind==='completed'?` <button class="action" onclick="revertTask('${t.id}')">DO로 되돌리기</button>`:''}</p>`).join('')||'<p>No records.</p>'}`)}
+async function revertTask(id){const {error}=await sb.from('tasks').update({status:'in_progress'}).eq('id',id).eq('user_id',uid());if(error)return alert(error.message);closeModal();renderSee()}
 async function renderHistory(){const plans=await getPlans();let html='';for(const p of plans){const {data:r}=await sb.from('plan_revisions').select('*').eq('plan_id',p.id).eq('user_id',uid()).order('revision_number',{ascending:true});html+=`<article class="plan-card"><h3>${esc(p.title)}</h3><p>Current: ${p.start_date} — ${p.end_date} · ${p.priority} · ${fmtMin(p.estimated_minutes)}</p>${(r||[]).map(x=>`<div class="timeline"><b>Revision ${x.revision_number}</b><br>${x.start_date} — ${x.end_date}<br>${x.priority} · ${fmtMin(x.estimated_minutes)}<br>${esc(x.success_criteria)}</div>`).join('')||'<p class="meta">No revisions yet.</p>'}</article>`}
 app.innerHTML=shell('HISTORY',`<div class="grid">${html}</div><button class="action" onclick="exportAll()">EXPORT ALL DATA</button>`)}
 async function exportAll() {

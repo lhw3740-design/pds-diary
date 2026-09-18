@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlanDoSee Diary v2 database contract",
+  "timezone": {
+    "storage": "UTC timestamptz for execution timestamps",
+    "display": "Asia/Seoul",
+    "date_rule": "delayed means incomplete and due_date < current Seoul date"
+  },
+  "tables": {
+    "plans": [
+      "id uuid pk",
+      "title text",
+      "start_date date",
+      "end_date date",
+      "priority LOW|MID|HIGH",
+      "success_criteria text",
+      "estimated_minutes integer",
+      "deleted_at timestamptz",
+      "created_at timestamptz",
+      "updated_at timestamptz"
+    ],
+    "plan_revisions": [
+      "id uuid pk",
+      "plan_id uuid fk plans",
+      "title",
+      "start_date",
+      "end_date",
+      "priority",
+      "success_criteria",
+      "estimated_minutes",
+      "revision_number",
+      "created_at"
+    ],
+    "tasks": [
+      "id uuid pk",
+      "plan_id uuid fk plans",
+      "title",
+      "due_date date",
+      "priority LOW|MID|HIGH",
+      "tag text",
+      "estimated_minutes integer",
+      "status in_progress|completed",
+      "deleted_at timestamptz",
+      "created_at",
+      "updated_at"
+    ],
+    "execution_logs": [
+      "id uuid pk",
+      "task_id uuid fk tasks",
+      "started_at timestamptz",
+      "ended_at timestamptz",
+      "actual_minutes integer",
+      "blocker text",
+      "reflection text",
+      "created_at"
+    ],
+    "reflections": [
+      "id uuid pk",
+      "plan_id uuid fk plans",
+      "reflection_text text",
+      "next_action text",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "relations": [
+    "plans 1:N plan_revisions",
+    "plans 1:N tasks",
+    "tasks 1:N execution_logs",
+    "plans 1:N reflections"
+  ],
+  "aggregation": {
+    "plan_count": "non-deleted tasks",
+    "completed_count": "non-deleted tasks with status=completed",
+    "delayed_count": "non-deleted incomplete tasks due before Seoul today",
+    "blocked_count": "non-deleted tasks having at least one execution blocker",
+    "estimated": "sum task estimated_minutes",
+    "actual": "sum execution_logs actual_minutes",
+    "difference": "actual-estimated"
+  }
+}
